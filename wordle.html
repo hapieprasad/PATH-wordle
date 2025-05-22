@@ -289,7 +289,7 @@
     <script type="module">
         // Configuration flag for daily check
         // Set to `true` to enable daily limit, `false` to disable for testing
-        const dailyCheckEnabled = true; // Change to false for testing on the same day!
+        const dailyCheckEnabled = true; // Set to true to enforce daily limit!
 
         // Array of 7-letter pension-related words with assigned dates and definitions (all uppercase)
         // Words and definitions are Base64 encoded.
@@ -305,7 +305,7 @@
             { date: '2025-05-29', word: 'QkFMQU5DRQ==', definition: 'VEhFIEFNT1VOVCBPRiBNT05FWSBSRU1BSU5JTkcgSU4gQU4gQUNDT1VOVC4=' },
             { date: '2025-05-30', word: 'REVQT1NJVA==', definition: 'QSBTVU0gT0YgTU9ORVkgUExBQ0VEIE9SIEtFUCBJTiBBIEJBTksgQUNDT1VOVCwgVVNVQUxMWSBUbyBHQUlOIEpOU1VSQU5DZS4=' },
             { date: '2025-05-31', word: 'RkFSTklORw==', definition: 'TU9ORVkgT0JUREFJTlVEIElOIFJFVFVSTiBGT1IgTEFCT1IgT1IgU0VSVklDRVMu' },
-            { date: '2025-06-01', word: 'RkVERVJBTA==', definition: 'UkVMQVRJTkcgVE8gVEhFIENFTlRSQUwgR09WRVLOTUVOVCBPRiBBIENPVU5UUlk=, IE9GVEVOIElOVk9MVkVEIElOIFJFR1VMQVRJTkcgUEVOU0lPTlMu' },
+            { date: '2025-06-01', word: 'RkVERVJBTA==', definition: 'UkVMQVRJTkcgVE8gVEhFIENFTlRSQUwgR09WRVLOTUVOVCBPRiBBIENPVU5UUlk=,IE9GVEVOIElOVk9MVkVEIElOIFJFR1VMQVRJTkcgUEVOU0lPTlMu' },
             { date: '2025-06-02', word: 'R1JPV1RIUw==', definition: 'SU5DUkVBc2VzIElOIFRIRSBWQUxVRUggT0YgSU5WRVNUTUVOVFMgT1ZFUlQgVElNRS4=' },
             { date: '2025-06-03', word: 'SU5WRVNUUw==', definition: 'VE8gUFVUIE1PTkVZIElOVE8gRklOQU5DSUFMIFNDSEVNRVMsIFNIQVJFUywgUFJPUEVSVFksIE9SIEEgQ09NTUVSQ0lBTCBWRU5UVVJFIFdJVEggVEhFIEVYUEVDVEFUSU9OIE9GSU5WRVNUTUVOVFMgQSBQUk9GSVQ=' },
             { date: '2025-06-04', word: 'TUFOQUdFUg==', definition: 'QSBQRVJTT04gUkVTUE9OU0lCTEUgRk9SIENPTlRST0xMSU5HIE9SIEFETUlOSVNURVJJTkcgQUxMIE9SIFBBUlQgT0YgQSBHT1ZFUk5NRU5UIE9SIFNDSEVNRVMu' },
@@ -342,7 +342,7 @@
         const modalDefinitionText = document.getElementById('modal-definition-text');
 
         /**
-         * Gets today's date in ISO YYYY-MM-DD format.
+         * Gets today's date in ISO format (YYYY-MM-DD).
          * @returns {string} The current date as a string.
          */
         function getTodayDateString() {
@@ -513,6 +513,9 @@
 
             // Attempt to load saved game state
             const loadedState = loadGameState();
+
+            console.log(`Daily Check Enabled: ${dailyCheckEnabled}`);
+            console.log(`Has Played Today: ${hasPlayedToday()}`);
 
             if (dailyCheckEnabled && hasPlayedToday()) {
                 gameOver = true; // Set game over immediately
