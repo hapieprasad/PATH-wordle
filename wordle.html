@@ -318,7 +318,7 @@
             { date: '2025-06-11', word: 'VEFYQUJMRQ==', definition: 'U1VCIEpFQ1QgVE8gVEFYQVRJT04u' },
             { date: '2025-06-12', word: 'UFJFTUlVTS==', definition: 'QU4gQU1PVU5UIFRPIEJFIENPTlRSaUJVVElPTlMgRk9SIElOU1VSQU5DZS4=' },
             { date: '2025-06-13', word: 'Q0FQSUZBTA==', definition: 'V0VBTFRIIElOIFRIRSBGT1JNIERJTlUgTU9ORVkgT1IgT1RIRVIgQVNTRVRTIE9XTkVEIEJZIEEgUEVSU09OIE9SIFNDSEVNRVMu' },
-            { date: '2025-06-14', word: 'Q1JFRElUUw==', definition: 'VEhFIEFCSUxJVFkgT0YgQSBHVUFTUyBPUiBTRVJWSUNFUyBGUk9NIFdISUNIIFNTb21FVEhJTkcgT1JJR0lOQVRFUyBPUiBDQU4gQkUgT0JUREFJTlVE.' }
+            { date: '2025-05-14', word: 'Q1JFRElUUw==', definition: 'VEhFIEFCSUxJVFkgT0YgQSBHVUFTUyBPUiBTRVJWSUNFUyBGUk9NIFdISUNIIFNTb21FVEhJTkcgT1JJR0lOQVRFUyBPUiBDQU4gQkUgT0JUREFJTlVE.' }
         ];
 
         // Game state variables
@@ -342,7 +342,7 @@
         const modalDefinitionText = document.getElementById('modal-definition-text');
 
         /**
-         * Gets today's date in ISO affrontare-MM-DD format.
+         * Gets today's date in ISO YYYY-MM-DD format.
          * @returns {string} The current date as a string.
          */
         function getTodayDateString() {
@@ -373,12 +373,22 @@
          * Saves the current game state to localStorage.
          */
         function saveGameState() {
+            const keyboardState = [];
+            document.querySelectorAll('.key-button').forEach(button => {
+                let keyStatus = '';
+                if (button.classList.contains('correct-key')) keyStatus = 'correct-key';
+                else if (button.classList.contains('present-key')) keyStatus = 'present-key';
+                else if (button.classList.contains('absent-key')) keyStatus = 'absent-key';
+                keyboardState.push({ key: button.dataset.key, status: keyStatus });
+            });
+
             const gameState = {
                 secretWord: secretWord,
                 secretWordDefinition: secretWordDefinition,
                 currentRow: currentRow,
                 currentGuess: currentGuess,
                 gameGridState: gameGridState, // Save the full grid state
+                keyboardState: keyboardState, // Save keyboard state
                 lastPlayedDate: getTodayDateString() // Associate with today's date
             };
             localStorage.setItem('pensionWordleGameState', JSON.stringify(gameState));
@@ -409,6 +419,7 @@
          */
         function clearGameState() {
             localStorage.removeItem('pensionWordleGameState');
+            localStorage.removeItem('pensionWordleKeyboardState'); // Also clear keyboard state
         }
 
         /**
@@ -430,13 +441,13 @@
          * Enables all keyboard input and visually enables letter boxes.
          */
         function enableKeyboardAndGrid() {
-            // Ensure event listeners are only added once
-            if (!document.onkeydown || !document.onkeydown.name.includes('handleKeydown')) {
-                document.addEventListener('keydown', handleKeydown);
-            }
-            if (!keyboard.onclick || !keyboard.onclick.name.includes('handleVirtualKeyboardClick')) {
-                keyboard.addEventListener('click', handleVirtualKeyboardClick);
-            }
+            // Always remove before adding to prevent duplicates
+            document.removeEventListener('keydown', handleKeydown);
+            keyboard.removeEventListener('click', handleVirtualKeyboardClick);
+
+            document.addEventListener('keydown', handleKeydown);
+            keyboard.addEventListener('click', handleVirtualKeyboardClick);
+            
             document.querySelectorAll('.key-button').forEach(button => {
                 button.disabled = false;
                 button.classList.remove('opacity-50', 'cursor-not-allowed');
@@ -523,12 +534,15 @@
                         }
                     }
                     // Apply keyboard colors from the last played game
-                    loadedState.keyboardState.forEach(keyData => {
-                        const keyButton = document.querySelector(`.key-button[data-key="${keyData.key}"]`);
-                        if (keyButton) {
-                            keyButton.classList.add(keyData.status);
-                        }
-                    });
+                    const loadedKeyboardState = localStorage.getItem('pensionWordleKeyboardState');
+                    if (loadedKeyboardState) {
+                        JSON.parse(loadedKeyboardState).forEach(keyData => {
+                            const keyButton = document.querySelector(`.key-button[data-key="${keyData.key}"]`);
+                            if (keyButton) {
+                                keyButton.classList.add(keyData.status);
+                            }
+                        });
+                    }
 
                     showDefinitionModal(secretWord, secretWordDefinition); // Show definition modal
                 } else {
@@ -547,6 +561,7 @@
             }
 
             // If not played today (or daily check is disabled), proceed with game setup
+            gameOver = false; // Ensure gameOver is false when starting/resuming a game
             enableKeyboardAndGrid(); // Ensure keyboard and grid are enabled
 
             if (loadedState) {
@@ -575,12 +590,15 @@
                     }
                 }
                 // Apply keyboard colors from the loaded state
-                loadedState.keyboardState.forEach(keyData => {
-                    const keyButton = document.querySelector(`.key-button[data-key="${keyData.key}"]`);
-                    if (keyButton) {
-                        keyButton.classList.add(keyData.status);
-                    }
-                });
+                const loadedKeyboardState = localStorage.getItem('pensionWordleKeyboardState');
+                if (loadedKeyboardState) {
+                    JSON.parse(loadedKeyboardState).forEach(keyData => {
+                        const keyButton = document.querySelector(`.key-button[data-key="${keyData.key}"]`);
+                        if (keyButton) {
+                            keyButton.classList.add(keyData.status);
+                        }
+                    });
+                }
 
                 messageBox.textContent = `Welcome back! Continue your game.`;
                 messageBox.classList.remove('text-red-500', 'text-green-500');
@@ -711,6 +729,22 @@
         }
 
         /**
+         * Handles Enter key action (submitting a guess).
+         */
+        function handleEnter() {
+            if (currentGuess.length !== wordLength) { // Use wordLength here
+                showMessage('Not enough letters!');
+                return;
+            }
+
+            const guessWord = currentGuess.join('');
+
+            // In a real Wordle, you'd check if the word exists in a dictionary.
+            // For this version, we'll just proceed with the guess.
+            processGuess(guessWord);
+        }
+
+        /**
          * Processes the user's guess, applies styling, and checks for win/loss conditions.
          * @param {string} guessWord - The word guessed by the user.
          */
@@ -767,7 +801,7 @@
             }
             gameGridState[currentRow] = currentRowState; // Save the processed row state
 
-            // Collect current keyboard state
+            // Collect current keyboard state and save it separately
             const keyboardState = [];
             document.querySelectorAll('.key-button').forEach(button => {
                 let keyStatus = '';
