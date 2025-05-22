@@ -1,0 +1,727 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pension Wordle</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        /* Custom styles for the game */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6; /* Light gray background */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+            -webkit-user-select: none; /* Disable text selection */
+            -moz-user-select: none;
+            -ms-user-select: none;
+            user-select: none;
+        }
+
+        /* Prevent right-click context menu */
+        body[oncontextmenu="return false;"] {
+            pointer-events: auto; /* Ensure normal pointer events */
+        }
+
+        .word-row {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr); /* 7 columns for 7-letter words */
+            gap: 8px; /* Space between letter boxes */
+            margin-bottom: 8px;
+        }
+
+        .letter-box {
+            width: 100%; /* Make width responsive to grid column */
+            padding-bottom: 100%; /* Creates a square aspect ratio */
+            position: relative; /* For absolute positioning of content */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            border: 2px solid #d1d5db; /* Light gray border */
+            font-size: 2rem;
+            font-weight: bold;
+            text-transform: uppercase;
+            background-color: #ffffff; /* White background */
+            border-radius: 8px; /* Rounded corners */
+            transition: background-color 0.3s ease, border-color 0.3s ease;
+            outline: none; /* Remove default outline */
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05); /* Subtle shadow */
+        }
+
+        /* Content inside the letter box to center it */
+        .letter-box::before {
+            content: attr(data-letter); /* Use data-letter attribute for content */
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            line-height: 1; /* Adjust line height for vertical centering */
+        }
+
+        /* Styles for correct, present, and absent letters */
+        .letter-box.correct {
+            background-color: #10b981; /* Green */
+            border-color: #10b981;
+            color: #ffffff;
+        }
+
+        .letter-box.present {
+            background-color: #f59e0b; /* Yellow/Orange */
+            border-color: #f59e0b;
+            color: #ffffff;
+        }
+
+        .letter-box.absent {
+            background-color: #6b7280; /* Gray */
+            border-color: #6b7280;
+            color: #ffffff;
+        }
+
+        .letter-box.active {
+            border-color: #3b82f6; /* Blue border for active box */
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.5); /* Blue glow for active box */
+        }
+
+        /* Style for disabled letter boxes (when game is over or already played) */
+        .letter-box.disabled-box {
+            opacity: 0.6;
+            pointer-events: none; /* Prevent interaction */
+            background-color: #e5e7eb; /* Lighter gray for disabled */
+        }
+
+        .keyboard-row {
+            display: flex;
+            justify-content: center;
+            gap: 6px;
+            margin-bottom: 8px;
+        }
+
+        .key-button {
+            background-color: #d1d5db; /* Light gray key background */
+            color: #1f2937; /* Dark text */
+            padding: 12px 16px;
+            border-radius: 8px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s ease, transform 0.1s ease;
+            min-width: 40px; /* Ensure keys have a minimum width */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+
+        .key-button:hover {
+            background-color: #9ca3af; /* Darker gray on hover */
+            transform: translateY(-1px); /* Slight lift on hover */
+        }
+
+        .key-button:active {
+            background-color: #6b7280; /* Even darker gray on active */
+            transform: translateY(0);
+        }
+
+        .key-button.large {
+            flex-grow: 1; /* Make Enter and Backspace larger */
+            min-width: 60px;
+        }
+
+        /* Styling for keyboard keys after a guess */
+        .key-button.correct-key {
+            background-color: #10b981;
+            color: #ffffff;
+        }
+
+        .key-button.present-key {
+            background-color: #f59e0b;
+            color: #ffffff;
+        }
+
+        .key-button.absent-key {
+            background-color: #6b7280;
+            color: #ffffff;
+        }
+
+        /* Modal Overlay */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5); /* Semi-transparent black overlay */
+            display: flex;
+            justify-content: center;
+            align-items: flex-end; /* Align content to the bottom */
+            padding-bottom: 200px; /* Adjust this value to position above keyboard */
+            z-index: 1000; /* Ensure it's on top */
+        }
+
+        /* Modal Content Box */
+        .modal-content {
+            background-color: #ffffff;
+            padding: 24px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+            max-width: 400px;
+            width: 90%;
+            text-align: center;
+            position: relative;
+        }
+
+        .modal-close-button {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: #6b7280;
+        }
+
+        /* Responsive adjustments */
+        @media (max-width: 768px) {
+            .letter-box {
+                font-size: 1.5rem; /* Adjust font size for smaller boxes */
+            }
+            .key-button {
+                padding: 10px 12px;
+                font-size: 1rem;
+                min-width: 35px;
+            }
+            .key-button.large {
+                min-width: 50px;
+            }
+            .modal-overlay {
+                padding-bottom: 150px; /* Adjust for smaller screens */
+            }
+        }
+
+        @media (max-width: 480px) {
+            .letter-box {
+                font-size: 1.2rem; /* Further adjust font size */
+            }
+            .key-button {
+                padding: 8px 10px;
+                font-size: 0.9rem;
+                min-width: 30px;
+            }
+            .key-button.large {
+                min-width: 45px;
+            }
+            .word-row {
+                gap: 6px;
+            }
+            .keyboard-row {
+                gap: 4px;
+            }
+            .modal-overlay {
+                padding-bottom: 120px; /* Further adjust for very small screens */
+            }
+        }
+    </style>
+</head>
+<body oncontextmenu="return false;">
+    <div class="flex flex-col items-center p-6 bg-white rounded-xl shadow-lg max-w-lg w-full">
+        <h1 class="text-4xl font-bold text-gray-800 mb-6">Pension Wordle</h1>
+
+        <div id="user-id-display" class="text-sm text-gray-500 mb-4"></div>
+
+        <div id="message-box" class="text-lg font-semibold text-center h-8 mb-4 text-gray-700"></div>
+
+        <div id="game-grid" class="mb-8 w-full max-w-xs">
+            </div>
+
+        <div id="keyboard" class="flex flex-col items-center w-full">
+            <div class="keyboard-row">
+                <button class="key-button" data-key="q">Q</button>
+                <button class="key-button" data-key="w">W</button>
+                <button class="key-button" data-key="e">E</button>
+                <button class="key-button" data-key="r">R</button>
+                <button class="key-button" data-key="t">T</button>
+                <button class="key-button" data-key="y">Y</button>
+                <button class="key-button" data-key="u">U</button>
+                <button class="key-button" data-key="i">I</button>
+                <button class="key-button" data-key="o">O</button>
+                <button class="key-button" data-key="p">P</button>
+            </div>
+            <div class="keyboard-row">
+                <button class="key-button" data-key="a">A</button>
+                <button class="key-button" data-key="s">S</button>
+                <button class="key-button" data-key="d">D</button>
+                <button class="key-button" data-key="f">F</button>
+                <button class="key-button" data-key="g">G</button>
+                <button class="key-button" data-key="h">H</button>
+                <button class="key-button" data-key="j">J</button>
+                <button class="key-button" data-key="k">K</button>
+                <button class="key-button" data-key="l">L</button>
+            </div>
+            <div class="keyboard-row">
+                <button class="key-button large" data-key="Enter">Enter</button>
+                <button class="key-button" data-key="z">Z</button>
+                <button class="key-button" data-key="x">X</button>
+                <button class="key-button" data-key="c">C</button>
+                <button class="key-button" data-key="v">V</button>
+                <button class="key-button" data-key="b">B</button>
+                <button class="key-button" data-key="n">N</button>
+				<button class="key-button" data-key="m">M</button>
+                <button class="key-button large" data-key="Backspace">⌫</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="definition-modal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <button class="modal-close-button" id="modal-close-button">&times;</button>
+            <h2 class="text-2xl font-bold text-gray-800 mb-4">Word Definition</h2>
+            <p id="modal-word" class="text-xl font-semibold text-blue-700 mb-2"></p>
+            <p id="modal-definition-text" class="text-base text-gray-700"></p>
+        </div>
+    </div>
+
+    <script type="module">
+        // Configuration flag for daily check
+        // Set to `true` to enable daily limit, `false` to disable for testing
+        const dailyCheckEnabled = false; // Change to false for testing on the same day!
+
+        // Array of 7-letter pension-related words with assigned dates and definitions (all uppercase)
+        // Words and definitions are Base64 encoded.
+        const pensionWords = [
+            { date: '2025-05-21', word: 'UEVOU0lPTg==', definition: 'QSBSRUdVTEFSIFBBWU1FTlQgTUFERSBEVVJJTkcgQSBQRVJTT04nUyBSRVRJUkVNRU5UIEZST00gQU4gSU5WRVNUTUVOVCBGVU5EIFRPIFdISUNIIFRIQVQgUEVSU09OIE9SIFRIX0VJUg==' },
+            { date: '2025-05-22', word: 'UkVUSVJFRQ==', definition: 'QSBQRVJTT04gV0hPIEhBUyBSRVRJUkVEIEZST00gVEhFSVIgRU1QTE9ZTUVOVC4=' },
+            { date: '2025-05-23', word: 'RlVORElORw==', definition: 'TU9ORVkgUFJPVklERUQsIEVTUEVDSUFMTFkgQlkgQU4gT1JHQU5JWkFUSU9OIE9SIEdPVkVSTk1FTlQsIEZPUiBBIFBBUlRJQ1VMQVIgUFVSTk9TRS4=' },
+            { date: '2025-05-24', word: 'QU5OVUlUWQ==', definition: 'QSBGSVhFRCBTVU0gT0YgTU9ORVkgUEFJRCBUTyBTb21FT05FIEVBQ0ggWUVEQVIsIFRZUElDQUxMWSBGTE9SIFRIX0VJUg==' },
+            { date: '2025-05-25', word: 'VkVTVElORw==', definition: 'VEhFIFBST0NFU1MgQlkgV0hJQ0ggQU4gRU1QTE9ZRUUgR0FJTlMgQSBOT04tRk9SRkVJVEFCTEUgUklHSFQgVE8gRU1QTE9ZRVIgQ09OVFJJQlVUSU9OUyBJTiBBIFJFVElSRU1FTlQgUExBTi4=' },
+            { date: '2025-05-26', word: 'QkVORUZJVA==', definition: 'QSBQQVlNRU5UIE9SIEdJRlQgTUFERSBFWiBBTiBFTVBMT1lFUiwgQU4gSU5TVVJBTkNFIENPTVBBTlksIE9SIEEgUFVCTElDIEFHRU5DWS4=' },
+            { date: '2025-05-27', word: 'QUNUVUFSWQ==', definition: 'QSBQRVJTT04gV0hPIENPTVBJTEVTIEFORCBBTkFMWVpFUyBTVEFUSVNUSUNTIEFORCBVU0VTIFRIRU0gVE8gQ0FMQ1VMQVRFIEpOU1VSQU5DZSBSaVNLcyBBTkQgUFJFTUlVTVMu' },
+            { date: '2025-05-28', word: 'QUNDT1VOVA==', definition: 'QSBSRUNPUkQgT1IgU1RBVEVNRU5UIE9GIFZJTkFOQ0lBTCBFWHBlTkRJVFVSZSBBTkQgUkVDRUlQVFMIFJFTElORyBUbyBBIFBBUlRJQ1VMQVIgUEVSSU9EIE9SIFBVUlBPU0Uu' },
+            { date: '2025-05-29', word: 'QkFMQU5DRQ==', definition: 'VEhFIEFNT1VOVCBPRiBNT05FWSBSRU1BSU5JTkcgSU4gQU4gQUNDT1VOVC4=' },
+            { date: '2025-05-30', word: 'REVQT1NJVA==', definition: 'QSBTVU0gT0YgTU9ORVkgUExBQ0VEIE9SIEtFUCBJTiBBIEJBTksgQUNDT1VOVCwgVVNVQUxMWSBUbyBHQUlOIEpOU1VSQU5DZS4=' },
+            { date: '2025-05-31', word: 'RkFSTklORw==', definition: 'TU9ORVkgT0JUREFJTlVEIElOIFJFVFVSTiBGT1IgTEFCT1IgT1IgU0VSVklDRVMu' },
+            { date: '2025-06-01', word: 'RkVERVJBTA==', definition: 'UkVMQVRJTkcgVE8gVEhFIENFTlRSQUwgR09WRVLOTUVOVCBPRiBBIENPVU5UUlk=, IE9GVEVOIElOVk9MVkVEIElOIFJFR1VMQVRJTkcgUEVOU0lPTlMu' },
+            { date: '2025-06-02', word: 'R1JPV1RIUw==', definition: 'SU5DUkVBc2VzIElOIFRIRSBWQUxVRUggT0YgSU5WRVNUTUVOVFMgT1ZFUlQgVElNRS4=' },
+            { date: '2025-06-03', word: 'SU5WRVNUUw==', definition: 'VE8gUFVUIE1PTkVZIElOVE8gRklOQU5DSUFMIFNDSEVNRVMsIFNIQVJFUywgUFJPUEVSVFksIE9SIEEgQ09NTUVSQ0lBTCBWRU5UVVJFIFdJVEggVEhFIEVYUEVDVEFUSU9OIE9GSU5WRVNUTUVOVFMgQSBQUk9GSVQ=' },
+            { date: '2025-06-04', word: 'TUFOQUdFUg==', definition: 'QSBQRVJTT04gUkVTUE9OU0lCTEUgRk9SIENPTlRST0xMSU5HIE9SIEFETUlOSVNURVJJTkcgQUxMIE9SIFBBUlQgT0YgQSBHT1ZFUk5NRU5UIE9SIFNDSEVNRVMu' },
+            { date: '2025-06-05', word: 'UEVSQ0VOVA==', definition: 'T05FIFBBUlQgSU4gRVZFUlkgSEVOSFJFRC4=' },
+            { date: '2025-06-06', word: 'UE9SVElPTg==', definition: 'QSBQQVJUIE9GIEEgTEFSR0VSIEFNT1VOVCwgR1JPVVAsIE9SIFdIT0xF.' },
+            { date: '2025-06-07', word: 'UkVWRU5VRQ==', definition: 'SU5DT01FIEVTUEVDSUFMTFkgV0hFbiBPRiBBIENPTVBBTlkgT1IgT1JHQU5JWkFUSU9OIEFORCBPRiBBIFNVQlNUQU5USUFMIE5BVFVSZS4=' },
+            { date: '2025-06-08', word: 'U0VSVklDRQ==', definition: 'VEhFIEFDVElPTiBPRiBIRUxQSU5HIE9SIERPSU5HIFdPUksgRk9SIFNTb21FT05F.' },
+            { date: '2025-06-09', word: 'U09VUkNFUw==', definition: 'UExBQ0VTLyBQRU9QTEUvIFRSSU5HUyBGUk9NIFdISUNIIFNTb21FVEhJTkcgT1JJR0lOQVRFUyBPUiBDQU4gQkUgT0JUREFJTlVE.' },
+            { date: '2025-06-10', word: 'U1VQUE9SVg==', definition: 'RklOQU5DSUFMIEPBTlRSaUJVVElPTlMgVE8gQSBQRVJTT04gT1IgSU5TVElUVVRJT04u' },
+            { date: '2025-06-11', word: 'VEFYQUJMRQ==', definition: 'U1VCIEpFQ1QgVE8gVEFYQVRJT04u' },
+            { date: '2025-06-12', word: 'UFJFTUlVTS==', definition: 'QU4gQU1PVU5UIFRPIEJFIENPTlRSaUJVVElPTlMgRk9SIElOU1VSQU5DZS4=' },
+            { date: '2025-06-13', word: 'Q0FQSUZBTA==', definition: 'V0VBTFRIIElOIFRIRSBGT1JNIERJTlUgTU9ORVkgT1IgT1RIRVIgQVNTRVRTIE9XTkVEIEJZIEEgUEVSU09OIE9SIFNDSEVNRVMu' },
+            { date: '2025-06-14', word: 'Q1JFRElUUw==', definition: 'VEhFIEFCSUxJVFkgT0YgQSBHVUFTUyBPUiBTRVJWSUNFUyBGUk9NIFdISUNIIFNTb21FVEhJTkcgT1JJR0lOQVRFUyBPUiBDQU4gQkUgT0JUREFJTlVE.' }
+        ];
+
+        // Game state variables
+        let secretWord = '';         // The word to be guessed (decoded)
+        let secretWordDefinition = ''; // The definition of the secret word (decoded)
+        let currentGuess = [];       // Letters in the current row
+        let currentRow = 0;          // Current guess row index (0-5)
+        let gameOver = false;        // Flag to indicate if the game is over
+        const maxRows = 6;           // Maximum number of guesses (6 tries for Wordle)
+        const wordLength = 7;        // The length of the Wordle word
+
+        // DOM elements
+        const gameGrid = document.getElementById('game-grid');
+        const messageBox = document.getElementById('message-box');
+        const keyboard = document.getElementById('keyboard');
+        const userIdDisplay = document.getElementById('user-id-display');
+        const definitionModal = document.getElementById('definition-modal');
+        const modalCloseButton = document.getElementById('modal-close-button');
+        const modalWord = document.getElementById('modal-word');
+        const modalDefinitionText = document.getElementById('modal-definition-text');
+
+        /**
+         * Gets today's date in ISO YYYY-MM-DD format.
+         * @returns {string} The current date as a string.
+         */
+        function getTodayDateString() {
+            const today = new Date();
+            const year = today.getFullYear();
+            const month = String(today.getMonth() + 1).padStart(2, '0'); // Months are 0-indexed
+            const day = String(today.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        }
+
+        /**
+         * Checks if the user has already played today using localStorage.
+         * @returns {boolean} True if played today, false otherwise.
+         */
+        function hasPlayedToday() {
+            const lastPlayedDate = localStorage.getItem('pensionWordleLastPlayedDate');
+            return lastPlayedDate === getTodayDateString();
+        }
+
+        /**
+         * Marks the game as played for today in localStorage.
+         */
+        function markPlayedToday() {
+            localStorage.setItem('pensionWordleLastPlayedDate', getTodayDateString());
+        }
+
+        /**
+         * Disables all keyboard input and visually disables letter boxes.
+         */
+        function disableKeyboardAndGrid() {
+            document.removeEventListener('keydown', handleKeydown);
+            keyboard.removeEventListener('click', handleVirtualKeyboardClick);
+            document.querySelectorAll('.key-button').forEach(button => {
+                button.disabled = true;
+                button.classList.add('opacity-50', 'cursor-not-allowed');
+            });
+            document.querySelectorAll('.letter-box').forEach(box => {
+                box.classList.add('disabled-box');
+            });
+        }
+
+        /**
+         * Enables all keyboard input and visually enables letter boxes.
+         */
+        function enableKeyboardAndGrid() {
+            // Ensure event listeners are only added once
+            if (!document.onkeydown || !document.onkeydown.name.includes('handleKeydown')) {
+                document.addEventListener('keydown', handleKeydown);
+            }
+            if (!keyboard.onclick || !keyboard.onclick.name.includes('handleVirtualKeyboardClick')) {
+                keyboard.addEventListener('click', handleVirtualKeyboardClick);
+            }
+            document.querySelectorAll('.key-button').forEach(button => {
+                button.disabled = false;
+                button.classList.remove('opacity-50', 'cursor-not-allowed');
+            });
+            document.querySelectorAll('.letter-box').forEach(box => {
+                box.classList.remove('disabled-box');
+            });
+        }
+
+        /**
+         * Displays the definition modal.
+         * @param {string} word - The word to display.
+         * @param {string} definition - The definition text.
+         */
+        function showDefinitionModal(word, definition) {
+            modalWord.textContent = word;
+            modalDefinitionText.textContent = definition;
+            definitionModal.classList.remove('hidden');
+        }
+
+        /**
+         * Hides the definition modal.
+         */
+        function hideDefinitionModal() {
+            definitionModal.classList.add('hidden');
+        }
+
+        /**
+         * Initializes the game by setting up the grid, picking a new word,
+         * and resetting game state.
+         */
+        async function initializeGame() {
+            // Clear message box initially
+            messageBox.textContent = ''; 
+
+            // Clear existing grid
+            gameGrid.innerHTML = '';
+            hideDefinitionModal(); // Ensure modal is hidden
+
+            // Set a local user ID
+            let userId = localStorage.getItem('localUserId');
+            if (!userId) {
+                userId = crypto.randomUUID();
+                localStorage.setItem('localUserId', userId);
+            }
+            userIdDisplay.textContent = `Your User ID: ${userId}`;
+
+            // Create new rows/boxes for the game grid (always create it)
+            for (let i = 0; i < maxRows; i++) {
+                const rowDiv = document.createElement('div');
+                rowDiv.classList.add('word-row');
+                rowDiv.id = `row-${i}`;
+                for (let j = 0; j < wordLength; j++) { // Use wordLength here
+                    const boxDiv = document.createElement('div');
+                    boxDiv.classList.add('letter-box', 'rounded-lg');
+                    boxDiv.id = `box-${i}-${j}`;
+                    // Set a data-letter attribute for CSS content property
+                    boxDiv.setAttribute('data-letter', ''); 
+                    rowDiv.appendChild(boxDiv);
+                }
+                gameGrid.appendChild(rowDiv);
+            }
+
+            // Check if daily check is enabled AND if user has played today
+            if (dailyCheckEnabled && hasPlayedToday()) {
+                gameOver = true; // Set game over immediately
+                showMessage(`You've already played today's Wordle! Come back tomorrow.`, 0);
+                disableKeyboardAndGrid(); // Disable keyboard and grid
+                
+                // Attempt to find today's word to display its definition even if game is over
+                const todayDateString = getTodayDateString();
+                const dailyWordEntry = pensionWords.find(entry => entry.date === todayDateString);
+                if (dailyWordEntry) {
+                    secretWord = atob(dailyWordEntry.word); // Decode word
+                    secretWordDefinition = atob(dailyWordEntry.definition); // Decode definition
+                    showDefinitionModal(secretWord, secretWordDefinition); // Show definition modal
+                }
+                return; // Stop initialization if already played
+            }
+
+            // If not played today (or daily check is disabled), proceed with game setup
+            enableKeyboardAndGrid(); // Ensure keyboard and grid are enabled
+
+            const todayDateString = getTodayDateString();
+            const dailyWordEntry = pensionWords.find(entry => entry.date === todayDateString);
+
+            if (dailyWordEntry) {
+                secretWord = atob(dailyWordEntry.word); // Decode word
+                secretWordDefinition = atob(dailyWordEntry.definition); // Decode definition
+                messageBox.textContent = `Today's word (${todayDateString})!`;
+                messageBox.classList.remove('text-red-500', 'text-green-500');
+                messageBox.classList.add('text-gray-700');
+            } else {
+                // Filter for words of the correct length if no daily word is found
+                const validLengthWords = pensionWords.filter(entry => atob(entry.word).length === wordLength);
+                const randomEntry = validLengthWords[Math.floor(Math.random() * validLengthWords.length)];
+                secretWord = atob(randomEntry.word); // Decode word
+                secretWordDefinition = atob(randomEntry.definition); // Decode definition
+                messageBox.textContent = 'No specific word for today, picking a random one!';
+                messageBox.classList.remove('text-red-500', 'text-green-500');
+                messageBox.classList.add('text-gray-700');
+            }
+
+            currentGuess = [];
+            currentRow = 0;
+            gameOver = false;
+            
+            document.querySelectorAll('.key-button').forEach(button => {
+                button.classList.remove('correct-key', 'present-key', 'absent-key');
+            });
+
+            updateActiveBox();
+            console.log('Secret word:', secretWord); // For debugging
+        }
+
+        /**
+         * Updates the active letter box visually by adding/removing 'active' class.
+         */
+        function updateActiveBox() {
+            document.querySelectorAll('.letter-box').forEach(box => {
+                box.classList.remove('active');
+            });
+
+            if (!gameOver && currentRow < maxRows) {
+                const activeBox = document.getElementById(`box-${currentRow}-${currentGuess.length}`);
+                if (activeBox) {
+                    activeBox.classList.add('active');
+                }
+            }
+        }
+
+        /**
+         * Handles physical keyboard input.
+         * @param {KeyboardEvent} event - The keyboard event object.
+         */
+        function handleKeydown(event) {
+            if (gameOver) return;
+
+            const key = event.key;
+
+            if (key === 'Backspace') {
+                handleBackspace();
+            } else if (key === 'Enter') {
+                handleEnter();
+            } else if (key.length === 1 && key.match(/[a-z]/i)) {
+                handleLetterInput(key.toUpperCase());
+            }
+        }
+
+        /**
+         * Handles virtual keyboard button clicks.
+         * @param {Event} event - The click event object.
+         */
+        function handleVirtualKeyboardClick(event) {
+            if (gameOver) return;
+
+            const target = event.target;
+            if (target.classList.contains('key-button')) {
+                const key = target.dataset.key;
+
+                if (key === 'Backspace') {
+                    handleBackspace();
+                } else if (key === 'Enter') {
+                    handleEnter();
+                } else {
+                    handleLetterInput(key.toUpperCase());
+                }
+            }
+        }
+
+        /**
+         * Handles letter input (both physical and virtual keyboard).
+         * @param {string} letter - The letter to input.
+         */
+        function handleLetterInput(letter) {
+            if (currentGuess.length < wordLength) { // Use wordLength here
+                currentGuess.push(letter);
+                const box = document.getElementById(`box-${currentRow}-${currentGuess.length - 1}`);
+                if (box) {
+                    // Update the data-letter attribute for CSS content
+                    box.setAttribute('data-letter', letter);
+                }
+                updateActiveBox();
+            }
+        }
+
+        /**
+         * Handles backspace action.
+         */
+        function handleBackspace() {
+            if (currentGuess.length > 0) {
+                currentGuess.pop();
+                const box = document.getElementById(`box-${currentRow}-${currentGuess.length}`);
+                if (box) {
+                    // Clear the data-letter attribute
+                    box.setAttribute('data-letter', '');
+                }
+                updateActiveBox();
+            }
+        }
+
+        /**
+         * Handles Enter key action (submitting a guess).
+         */
+        function handleEnter() {
+            if (currentGuess.length !== wordLength) { // Use wordLength here
+                showMessage('Not enough letters!');
+                return;
+            }
+
+            const guessWord = currentGuess.join('');
+
+            // In a real Wordle, you'd check if the word exists in a dictionary.
+            // For this version, we'll just proceed with the guess.
+            processGuess(guessWord);
+        }
+
+        /**
+         * Processes the user's guess, applies styling, and checks for win/loss conditions.
+         * @param {string} guessWord - The word guessed by the user.
+         */
+        function processGuess(guessWord) {
+            const secretWordLetters = secretWord.split(''); // secretWord is already decoded here
+            const guessWordLetters = guessWord.split('');
+            const letterCounts = {};
+
+            secretWordLetters.forEach(letter => {
+                letterCounts[letter] = (letterCounts[letter] || 0) + 1;
+            });
+
+            for (let i = 0; i < wordLength; i++) { // Use wordLength here
+                const box = document.getElementById(`box-${currentRow}-${i}`);
+                const keyButton = document.querySelector(`.key-button[data-key="${guessWordLetters[i].toLowerCase()}"]`);
+
+                if (guessWordLetters[i] === secretWordLetters[i]) {
+                    box.classList.add('correct');
+                    if (!keyButton.classList.contains('correct-key')) {
+                        keyButton.classList.add('correct-key');
+                    }
+                    letterCounts[guessWordLetters[i]]--;
+                }
+            }
+
+            for (let i = 0; i < wordLength; i++) { // Use wordLength here
+                const box = document.getElementById(`box-${currentRow}-${i}`);
+                const keyButton = document.querySelector(`.key-button[data-key="${guessWordLetters[i].toLowerCase()}"]`);
+
+                if (box.classList.contains('correct')) {
+                    continue;
+                }
+
+                if (secretWordLetters.includes(guessWordLetters[i]) && letterCounts[guessWordLetters[i]] > 0) {
+                    box.classList.add('present');
+                    if (!keyButton.classList.contains('correct-key') && !keyButton.classList.contains('present-key')) {
+                        keyButton.classList.add('present-key');
+                    }
+                    letterCounts[guessWordLetters[i]]--;
+                } else {
+                    box.classList.add('absent');
+                    if (!keyButton.classList.contains('correct-key') && !keyButton.classList.contains('present-key')) {
+                        keyButton.classList.add('absent-key');
+                    }
+                }
+            }
+
+            if (guessWord === secretWord) {
+                showMessage(`Congratulations! You guessed the word in ${currentRow + 1} tries!`, 0);
+                endGame(true);
+            } else if (currentRow === maxRows - 1) {
+                showMessage(`Game Over! The word was "${secretWord}".`, 0);
+                endGame(false);
+            } else {
+                currentRow++;
+                currentGuess = [];
+                updateActiveBox();
+            }
+        }
+
+        /**
+         * Displays a message in the message box.
+         * @param {string} message - The message to display.
+         * @param {number} duration - How long to display the message in ms. If 0, the message will persist.
+         */
+        function showMessage(message, duration = 2000) {
+            messageBox.textContent = message;
+            messageBox.classList.remove('text-red-500', 'text-green-500', 'text-gray-700');
+            if (message.includes('Congratulations')) {
+                messageBox.classList.add('text-green-500');
+            } else if (message.includes('Game Over') || message.includes('Not enough') || message.includes('already played')) {
+                messageBox.classList.add('text-red-500');
+            } else {
+                messageBox.classList.add('text-gray-700');
+            }
+
+            if (duration > 0 && !gameOver) {
+                setTimeout(() => {
+                    messageBox.textContent = '';
+                }, duration);
+            }
+        }
+
+        /**
+         * Ends the game, disabling further input and displaying the definition.
+         * Marks the game as played for today.
+         * @param {boolean} won - True if the player won, false otherwise.
+         */
+        async function endGame(won) {
+            gameOver = true;
+            disableKeyboardAndGrid(); // Disable keyboard and grid after game ends
+            
+            // Only mark as played if daily check is enabled
+            if (dailyCheckEnabled) {
+                markPlayedToday(); // Mark the game as played for today in localStorage
+            }
+
+            document.querySelectorAll('.letter-box').forEach(box => {
+                box.classList.remove('active');
+            });
+
+            showDefinitionModal(secretWord, secretWordDefinition); // Show definition modal
+        }
+
+        // Event listener for closing the definition modal
+        modalCloseButton.addEventListener('click', hideDefinitionModal);
+
+        // Initialize the game when the page loads
+        window.onload = initializeGame;
+    </script>
+</body>
+</html>
