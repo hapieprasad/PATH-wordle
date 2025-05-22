@@ -272,7 +272,6 @@
                 <button class="key-button" data-key="v">V</button>
                 <button class="key-button" data-key="b">B</button>
                 <button class="key-button" data-key="n">N</button>
-				<button class="key-button" data-key="m">M</button>
                 <button class="key-button large" data-key="Backspace">⌫</button>
             </div>
         </div>
@@ -328,6 +327,7 @@
         let currentGuess = [];       // Letters in the current row
         let currentRow = 0;          // Current guess row index (0-5)
         let gameOver = false;        // Flag to indicate if the game is over
+        let gameGridState = [];      // Stores the state of the grid for persistence
         const maxRows = 6;           // Maximum number of guesses (6 tries for Wordle)
         const wordLength = 7;        // The length of the Wordle word
 
@@ -342,7 +342,7 @@
         const modalDefinitionText = document.getElementById('modal-definition-text');
 
         /**
-         * Gets today's date in ISO YYYY-MM-DD format.
+         * Gets today's date in ISO affrontare-MM-DD format.
          * @returns {string} The current date as a string.
          */
         function getTodayDateString() {
@@ -367,6 +367,48 @@
          */
         function markPlayedToday() {
             localStorage.setItem('pensionWordleLastPlayedDate', getTodayDateString());
+        }
+
+        /**
+         * Saves the current game state to localStorage.
+         */
+        function saveGameState() {
+            const gameState = {
+                secretWord: secretWord,
+                secretWordDefinition: secretWordDefinition,
+                currentRow: currentRow,
+                currentGuess: currentGuess,
+                gameGridState: gameGridState, // Save the full grid state
+                lastPlayedDate: getTodayDateString() // Associate with today's date
+            };
+            localStorage.setItem('pensionWordleGameState', JSON.stringify(gameState));
+        }
+
+        /**
+         * Loads the game state from localStorage.
+         * @returns {object|null} The loaded game state or null if none found/invalid.
+         */
+        function loadGameState() {
+            const savedState = localStorage.getItem('pensionWordleGameState');
+            if (savedState) {
+                const gameState = JSON.parse(savedState);
+                // Only load if it's for today's word
+                if (gameState.lastPlayedDate === getTodayDateString()) {
+                    return gameState;
+                } else {
+                    // Clear old state if it's from a different day
+                    clearGameState();
+                    return null;
+                }
+            }
+            return null;
+        }
+
+        /**
+         * Clears the saved game state from localStorage.
+         */
+        function clearGameState() {
+            localStorage.removeItem('pensionWordleGameState');
         }
 
         /**
@@ -424,7 +466,7 @@
 
         /**
          * Initializes the game by setting up the grid, picking a new word,
-         * and resetting game state.
+         * and resetting game state or loading a saved one.
          */
         async function initializeGame() {
             // Clear message box initially
@@ -458,19 +500,48 @@
                 gameGrid.appendChild(rowDiv);
             }
 
-            // Check if daily check is enabled AND if user has played today
+            // Attempt to load saved game state
+            const loadedState = loadGameState();
+
             if (dailyCheckEnabled && hasPlayedToday()) {
                 gameOver = true; // Set game over immediately
                 showMessage(`You've already played today's Wordle! Come back tomorrow.`, 0);
                 disableKeyboardAndGrid(); // Disable keyboard and grid
                 
-                // Attempt to find today's word to display its definition even if game is over
-                const todayDateString = getTodayDateString();
-                const dailyWordEntry = pensionWords.find(entry => entry.date === todayDateString);
-                if (dailyWordEntry) {
-                    secretWord = atob(dailyWordEntry.word); // Decode word
-                    secretWordDefinition = atob(dailyWordEntry.definition); // Decode definition
+                // If a state was loaded (meaning they completed the game earlier today)
+                if (loadedState) {
+                    secretWord = loadedState.secretWord;
+                    secretWordDefinition = loadedState.secretWordDefinition;
+                    // Re-render the grid based on the saved state for display
+                    for (let r = 0; r < loadedState.gameGridState.length; r++) {
+                        for (let c = 0; c < loadedState.gameGridState[r].length; c++) {
+                            const box = document.getElementById(`box-${r}-${c}`);
+                            if (box) {
+                                box.setAttribute('data-letter', loadedState.gameGridState[r][c].letter);
+                                box.classList.add(loadedState.gameGridState[r][c].status);
+                            }
+                        }
+                    }
+                    // Apply keyboard colors from the last played game
+                    loadedState.keyboardState.forEach(keyData => {
+                        const keyButton = document.querySelector(`.key-button[data-key="${keyData.key}"]`);
+                        if (keyButton) {
+                            keyButton.classList.add(keyData.status);
+                        }
+                    });
+
                     showDefinitionModal(secretWord, secretWordDefinition); // Show definition modal
+                } else {
+                    // This case handles if dailyCheckEnabled is true, but no game was actually completed
+                    // (e.g., if localStorage was manually set or cleared incorrectly).
+                    // We still need to find today's word to show its definition.
+                    const todayDateString = getTodayDateString();
+                    const dailyWordEntry = pensionWords.find(entry => entry.date === todayDateString);
+                    if (dailyWordEntry) {
+                        secretWord = atob(dailyWordEntry.word);
+                        secretWordDefinition = atob(dailyWordEntry.definition);
+                        showDefinitionModal(secretWord, secretWordDefinition);
+                    }
                 }
                 return; // Stop initialization if already played
             }
@@ -478,29 +549,70 @@
             // If not played today (or daily check is disabled), proceed with game setup
             enableKeyboardAndGrid(); // Ensure keyboard and grid are enabled
 
-            const todayDateString = getTodayDateString();
-            const dailyWordEntry = pensionWords.find(entry => entry.date === todayDateString);
+            if (loadedState) {
+                // Restore game state from localStorage
+                secretWord = loadedState.secretWord;
+                secretWordDefinition = loadedState.secretWordDefinition;
+                currentRow = loadedState.currentRow;
+                currentGuess = loadedState.currentGuess;
+                gameGridState = loadedState.gameGridState;
 
-            if (dailyWordEntry) {
-                secretWord = atob(dailyWordEntry.word); // Decode word
-                secretWordDefinition = atob(dailyWordEntry.definition); // Decode definition
-                messageBox.textContent = `Today's word (${todayDateString})!`;
+                // Populate the grid and keyboard with loaded state
+                for (let r = 0; r < currentRow; r++) {
+                    for (let c = 0; c < wordLength; c++) {
+                        const box = document.getElementById(`box-${r}-${c}`);
+                        if (box) {
+                            box.setAttribute('data-letter', gameGridState[r][c].letter);
+                            box.classList.add(gameGridState[r][c].status);
+                        }
+                    }
+                }
+                // Populate the current guess row if any letters were typed
+                for (let c = 0; c < currentGuess.length; c++) {
+                    const box = document.getElementById(`box-${currentRow}-${c}`);
+                    if (box) {
+                        box.setAttribute('data-letter', currentGuess[c]);
+                    }
+                }
+                // Apply keyboard colors from the loaded state
+                loadedState.keyboardState.forEach(keyData => {
+                    const keyButton = document.querySelector(`.key-button[data-key="${keyData.key}"]`);
+                    if (keyButton) {
+                        keyButton.classList.add(keyData.status);
+                    }
+                });
+
+                messageBox.textContent = `Welcome back! Continue your game.`;
                 messageBox.classList.remove('text-red-500', 'text-green-500');
                 messageBox.classList.add('text-gray-700');
+
             } else {
-                // Filter for words of the correct length if no daily word is found
-                const validLengthWords = pensionWords.filter(entry => atob(entry.word).length === wordLength);
-                const randomEntry = validLengthWords[Math.floor(Math.random() * validLengthWords.length)];
-                secretWord = atob(randomEntry.word); // Decode word
-                secretWordDefinition = atob(randomEntry.definition); // Decode definition
-                messageBox.textContent = 'No specific word for today, picking a random one!';
-                messageBox.classList.remove('text-red-500', 'text-green-500');
-                messageBox.classList.add('text-gray-700');
-            }
+                // Start a brand new game
+                const todayDateString = getTodayDateString();
+                const dailyWordEntry = pensionWords.find(entry => entry.date === todayDateString);
 
-            currentGuess = [];
-            currentRow = 0;
-            gameOver = false;
+                if (dailyWordEntry) {
+                    secretWord = atob(dailyWordEntry.word); // Decode word
+                    secretWordDefinition = atob(dailyWordEntry.definition); // Decode definition
+                    messageBox.textContent = `Today's word (${todayDateString})!`;
+                    messageBox.classList.remove('text-red-500', 'text-green-500');
+                    messageBox.classList.add('text-gray-700');
+                } else {
+                    // Filter for words of the correct length if no daily word is found
+                    const validLengthWords = pensionWords.filter(entry => atob(entry.word).length === wordLength);
+                    const randomEntry = validLengthWords[Math.floor(Math.random() * validLengthWords.length)];
+                    secretWord = atob(randomEntry.word); // Decode word
+                    secretWordDefinition = atob(randomEntry.definition); // Decode definition
+                    messageBox.textContent = 'No specific word for today, picking a random one!';
+                    messageBox.classList.remove('text-red-500', 'text-green-500');
+                    messageBox.classList.add('text-gray-700');
+                }
+
+                currentGuess = [];
+                currentRow = 0;
+                gameOver = false;
+                gameGridState = []; // Reset grid state for new game
+            }
             
             document.querySelectorAll('.key-button').forEach(button => {
                 button.classList.remove('correct-key', 'present-key', 'absent-key');
@@ -578,6 +690,7 @@
                     box.setAttribute('data-letter', letter);
                 }
                 updateActiveBox();
+                saveGameState(); // Save state after input
             }
         }
 
@@ -593,23 +706,8 @@
                     box.setAttribute('data-letter', '');
                 }
                 updateActiveBox();
+                saveGameState(); // Save state after backspace
             }
-        }
-
-        /**
-         * Handles Enter key action (submitting a guess).
-         */
-        function handleEnter() {
-            if (currentGuess.length !== wordLength) { // Use wordLength here
-                showMessage('Not enough letters!');
-                return;
-            }
-
-            const guessWord = currentGuess.join('');
-
-            // In a real Wordle, you'd check if the word exists in a dictionary.
-            // For this version, we'll just proceed with the guess.
-            processGuess(guessWord);
         }
 
         /**
@@ -625,9 +723,13 @@
                 letterCounts[letter] = (letterCounts[letter] || 0) + 1;
             });
 
+            // Store the state of the current row for persistence
+            const currentRowState = [];
+
             for (let i = 0; i < wordLength; i++) { // Use wordLength here
                 const box = document.getElementById(`box-${currentRow}-${i}`);
                 const keyButton = document.querySelector(`.key-button[data-key="${guessWordLetters[i].toLowerCase()}"]`);
+                let status = ''; // 'correct', 'present', or 'absent'
 
                 if (guessWordLetters[i] === secretWordLetters[i]) {
                     box.classList.add('correct');
@@ -635,7 +737,9 @@
                         keyButton.classList.add('correct-key');
                     }
                     letterCounts[guessWordLetters[i]]--;
+                    status = 'correct';
                 }
+                currentRowState.push({ letter: guessWordLetters[i], status: status });
             }
 
             for (let i = 0; i < wordLength; i++) { // Use wordLength here
@@ -652,13 +756,28 @@
                         keyButton.classList.add('present-key');
                     }
                     letterCounts[guessWordLetters[i]]--;
+                    currentRowState[i].status = 'present';
                 } else {
                     box.classList.add('absent');
                     if (!keyButton.classList.contains('correct-key') && !keyButton.classList.contains('present-key')) {
                         keyButton.classList.add('absent-key');
                     }
+                    currentRowState[i].status = 'absent';
                 }
             }
+            gameGridState[currentRow] = currentRowState; // Save the processed row state
+
+            // Collect current keyboard state
+            const keyboardState = [];
+            document.querySelectorAll('.key-button').forEach(button => {
+                let keyStatus = '';
+                if (button.classList.contains('correct-key')) keyStatus = 'correct-key';
+                else if (button.classList.contains('present-key')) keyStatus = 'present-key';
+                else if (button.classList.contains('absent-key')) keyStatus = 'absent-key';
+                keyboardState.push({ key: button.dataset.key, status: keyStatus });
+            });
+            localStorage.setItem('pensionWordleKeyboardState', JSON.stringify(keyboardState));
+
 
             if (guessWord === secretWord) {
                 showMessage(`Congratulations! You guessed the word in ${currentRow + 1} tries!`, 0);
@@ -670,6 +789,7 @@
                 currentRow++;
                 currentGuess = [];
                 updateActiveBox();
+                saveGameState(); // Save state after a valid guess
             }
         }
 
@@ -709,6 +829,7 @@
             if (dailyCheckEnabled) {
                 markPlayedToday(); // Mark the game as played for today in localStorage
             }
+            clearGameState(); // Clear saved game state when game ends
 
             document.querySelectorAll('.letter-box').forEach(box => {
                 box.classList.remove('active');
